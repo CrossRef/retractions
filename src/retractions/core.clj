@@ -47,7 +47,7 @@
          (map :DOI))))
 
 (defn pubmed-retractions []
-  (->> (-> "pubmed.txt" slurp (str/split #"\n"))
+  (->> (-> "pubmed-retraction-search-04-08-2015.txt" slurp (str/split #"\n"))
        (map pmid->doi)
        (filter (complement empty?))))
 
@@ -150,3 +150,25 @@
     (with-open [ff (io/writer f)]
       (csv/write-csv ff sorted-lines))))
 
+(defn cr-pubmed-diff-article-titles
+  "Names of retracted articles known by CrossRef but not PubMed"
+  []
+  (map
+   #(-> (str "http://api.crossref.org/v1/works/" %)
+        (http/get )
+        deref
+        :body
+        (json/read-str :key-fn keyword)
+        (get-in [:message :title 0]))
+   (clojure.set/difference
+    (set (crossref-retractions))
+    (set (pubmed-retractions)))))
+
+(defn add-cr-citation-counts [results-file citation-counts-file]
+  (let [results (read-string (slurp results-file))
+        citation-counts (drop 1 (-> citation-counts-file slurp
+                                    (str/replace #"\r" "\n")
+                                    csv/read-csv))]
+    (map #(concat % [(count (get results (first %)))]) citation-counts)))                             
+
+;; (add-cr-citation-counts "pubmed-results-04-08-2015.edn" "retracted-pubmed-dois-with-wos-citation-numbers.csv")
